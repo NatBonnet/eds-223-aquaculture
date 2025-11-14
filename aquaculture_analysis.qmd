@@ -1,0 +1,47 @@
+---
+title: "EDS 223: Determining Suitable Aquaculture EEZ"
+format: html
+---
+
+To start, we need to load all necessary data and make sure it has the coordinate reference system.
+
+shapefile for the West Coast EEZ
+bathymetry raster
+SST rasters
+combine SST rasters into a raster stack
+
+## Setup Code
+1.  Loading necessary libraries
+```{r}
+#| output: false
+# Read in necessary libraries
+library(tidyverse)
+library(sf)
+library(here)
+library(tmap)
+library(patchwork)
+library(stars)
+```
+
+
+2.  Importing data
+```{r}
+#| output: false
+# Load data in
+
+eez <- st_read(here("data", "wc_regions_clean.shp"))
+
+depth <- stars::read_stars(here("data", "depth.tif"))
+
+sst_2008 <- stars::read_stars(here("data", "average_annual_sst_2008.tif"))
+
+sst_2009 <- stars::read_stars(here("data", "average_annual_sst_2009.tif"))
+  
+sst_2010 <- stars::read_stars(here("data", "average_annual_sst_2010.tif"))
+
+sst_2011 <- stars::read_stars(here("data", "average_annual_sst_2011.tif"))
+
+sst_2012 <- stars::read_stars(here("data", "average_annual_sst_2012.tif"))
+  
+```
+
