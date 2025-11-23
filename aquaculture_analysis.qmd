@@ -1,14 +1,7 @@
 ---
-title: "EDS 223: Determining Suitable Aquaculture EEZ"
+title: "EDS 223 Homework 4: Determining Suitable Aquaculture EEZ"
 format: html
 ---
-
-To start, we need to load all necessary data and make sure it has the coordinate reference system.
-
-shapefile for the West Coast EEZ
-bathymetry raster
-SST rasters
-combine SST rasters into a raster stack
 
 ## Setup Code
 1.  Loading necessary libraries
@@ -32,22 +25,17 @@ library(stars)
 #| output: false
 # Load data in
 
-eez <- vect(here("data", "wc_regions_clean.shp"))
+eez <- read_sf(here("data", "wc_regions_clean.shp"))
 
 depth <- rast(here("data", "depth.tif"))
 
-sst_2008 <- rast(here("data", "average_annual_sst_2008.tif"))
-
-sst_2009 <- rast(here("data", "average_annual_sst_2009.tif"))
-  
-sst_2010 <- rast(here("data", "average_annual_sst_2010.tif"))
-
-sst_2011 <- rast(here("data", "average_annual_sst_2011.tif"))
-
-sst_2012 <- rast(here("data", "average_annual_sst_2012.tif"))
-
 # Combine sst rasters into a stack
-sst <- c(sst_2008, sst_2009, sst_2010, sst_2011, sst_2012)
+sst <- rast(c((here("data", "average_annual_sst_2008.tif")), 
+            (here("data", "average_annual_sst_2009.tif")), 
+            (here("data", "average_annual_sst_2010.tif")),
+            (here("data", "average_annual_sst_2011.tif")),
+            (here("data", "average_annual_sst_2012.tif"))))
+
 ```
 
 ```{r}
@@ -71,11 +59,6 @@ mean_sst <- mean(sst)
 mean_sst <- mean_sst - 273.15
 ```
 
-
-note: the resolutions of the SST and depth data do not match
-resample the depth data to match the resolution of the SST data using the nearest neighbor approach
-check that the depth and SST match in resolution, extent, and coordinate reference system
-hint: can the rasters be stacked?
 
 ```{r}
 # Crop by the extent of the sst
@@ -131,9 +114,6 @@ suitable <- sst_reclass*depth_reclass
 # Mask eez by suitable cells in West Coast region
 suitable_eez <- mask(suitable, eez)
 
-tm_shape(suitable_eez) +
-  tm_raster()
-
 zonal <- extract(suitable_eez, eez)
 
 zonal_count <- zonal %>% 
@@ -146,11 +126,24 @@ zonal_area <- extract(eez_area, eez)
 
 zonal_area <- zonal_area %>% 
   group_by(ID) %>% 
-  summarize(area = sum(mean, na.rm = TRUE))
+  summarize(area = sum(mean, na.rm = TRUE)) %>% 
+  rename('rgn_id' = ID)
+
+eez_zone_areas <- left_join(eez, zonal_area, by = 'rgn_id')
+
+tm_shape(eez_zone_areas) +
+  tm_polygons(fill = 'area',
+              fill.scale = tm_scale_continuous(values = "brewer.blues"), 
+              fill.legend = tm_legend(title = "suitable area (km^2)")) +
+  tm_basemap("Esri.OceanBasemap") +
+  tm_title(text = "Total Suitable Area for Oyster Aquaculture by EEZ", width = 10) +
+  tm_layout(component.autoscale=FALSE)
 ```
 
 ```{r}
 # Create generalizable function
+
+
 
 ```
 
