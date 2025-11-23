@@ -137,7 +137,8 @@ tm_shape(eez_zone_areas) +
               fill.legend = tm_legend(title = "suitable area (km^2)")) +
   tm_basemap("Esri.OceanBasemap") +
   tm_title(text = "Total Suitable Area for Oyster Aquaculture by EEZ", width = 10) +
-  tm_layout(component.autoscale=FALSE)
+  tm_layout(component.autoscale=FALSE) +
+  tm_graticules(alpha = 0.2)
 ```
 
 ```{r}
