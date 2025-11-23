@@ -20,6 +20,9 @@ library(sf)
 library(here)
 library(tmap)
 library(patchwork)
+library(raster)
+library(terra)
+library(tidyterra)
 library(stars)
 ```
 
@@ -29,19 +32,125 @@ library(stars)
 #| output: false
 # Load data in
 
-eez <- st_read(here("data", "wc_regions_clean.shp"))
+eez <- vect(here("data", "wc_regions_clean.shp"))
 
-depth <- stars::read_stars(here("data", "depth.tif"))
+depth <- rast(here("data", "depth.tif"))
 
-sst_2008 <- stars::read_stars(here("data", "average_annual_sst_2008.tif"))
+sst_2008 <- rast(here("data", "average_annual_sst_2008.tif"))
 
-sst_2009 <- stars::read_stars(here("data", "average_annual_sst_2009.tif"))
+sst_2009 <- rast(here("data", "average_annual_sst_2009.tif"))
   
-sst_2010 <- stars::read_stars(here("data", "average_annual_sst_2010.tif"))
+sst_2010 <- rast(here("data", "average_annual_sst_2010.tif"))
 
-sst_2011 <- stars::read_stars(here("data", "average_annual_sst_2011.tif"))
+sst_2011 <- rast(here("data", "average_annual_sst_2011.tif"))
 
-sst_2012 <- stars::read_stars(here("data", "average_annual_sst_2012.tif"))
-  
+sst_2012 <- rast(here("data", "average_annual_sst_2012.tif"))
+
+# Combine sst rasters into a stack
+sst <- c(sst_2008, sst_2009, sst_2010, sst_2011, sst_2012)
+```
+
+```{r}
+# Check CRS and fix if no match
+if (crs(eez) == crs(depth) &
+crs(eez) == crs(sst) &
+crs(depth) == crs(sst)){
+  print("CRS matches on all data")
+} else{
+  warning("CRS does not match between all datasets")
+  crs(depth) <- crs(eez)
+  crs(sst) <- crs(eez)
+}
+```
+
+Find mean SST from 2008-2012
+```{r}
+# Create raster of average SST values
+mean_sst <- mean(sst)
+
+mean_sst <- mean_sst - 273.15
+```
+
+
+note: the resolutions of the SST and depth data do not match
+resample the depth data to match the resolution of the SST data using the nearest neighbor approach
+check that the depth and SST match in resolution, extent, and coordinate reference system
+hint: can the rasters be stacked?
+
+```{r}
+# Crop by the extent of the sst
+sst_ext <- ext(mean_sst)
+
+depth_crop <- crop(depth, sst_ext)
+```
+
+```{r}
+res(depth_crop) == res(mean_sst)
+
+depth_crop_res = resample(depth_crop, mean_sst)
+
+res(depth_crop_res) == res(mean_sst)
+```
+
+```{r}
+# Check that bathymetry layer can stack with mean_sst- making sure that crs, res, and ext match
+c(depth_crop_res, mean_sst)
+# Works
+```
+
+
+```{r}
+# Reclassify suitable locations based on parameters
+
+# Create reclassification matrices
+sst_rcl <- matrix(c(-Inf, 11, 0,
+                  11, 30, 1,
+                  30, Inf, 0), 
+                  ncol = 3, byrow=TRUE)
+
+depth_rcl <- matrix(c(-Inf, -70, 0,
+                  -70, 0, 1,
+                  0, Inf, 0), 
+                  ncol = 3, byrow=TRUE)
+
+# Reclassify appropriately
+
+sst_reclass <- classify(mean_sst, rcl = sst_rcl)
+
+depth_reclass <- classify(depth_crop_res, rcl = depth_rcl)
+```
+
+```{r}
+# Multiply rasters to find where suitable conditions overlap
+suitable <- sst_reclass*depth_reclass
+```
+
+```{r}
+# Find the total suitable area within each eez
+
+# Mask eez by suitable cells in West Coast region
+suitable_eez <- mask(suitable, eez)
+
+tm_shape(suitable_eez) +
+  tm_raster()
+
+zonal <- extract(suitable_eez, eez)
+
+zonal_count <- zonal %>% 
+  group_by(ID) %>% 
+  summarise(count = sum(mean, na.rm = TRUE)) 
+
+eez_area <- suitable_eez *cellSize(suitable_eez, unit = 'km')
+
+zonal_area <- extract(eez_area, eez)
+
+zonal_area <- zonal_area %>% 
+  group_by(ID) %>% 
+  summarize(area = sum(mean, na.rm = TRUE))
+```
+
+```{r}
+# Create generalizable function
+
 ```
 
