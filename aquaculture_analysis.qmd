@@ -142,9 +142,106 @@ tm_shape(eez_zone_areas) +
 ```
 
 ```{r}
-# Create generalizable function
+# Generalized function
+eez_area_zone <- function(eez_data, depth_data, sst_data, min_temp, max_temp, min_depth, max_depth, species_name){
+  
+# Make sure all CRSs match with the EEZ data
+  if (crs(eez_data) != crs(depth_data) |
+crs(eez_data) != crs(sst_data) |
+crs(depth_data) != crs(sst_data)){
+  crs(depth_data) <- crs(eez_data)
+  crs(sst_data) <- crs(eez_data)
+}
+  
+# Find the mean sea surface temperature values and convert to Celsius
+  mean_sst <- mean(sst_data)
+  
+  mean_sst <- mean_sst - 273.15
+  
+# Crop depth data to the extent of the sea surface temperature data
+  # Crop by the extent of the sst
+  sst_ext <- ext(mean_sst)
+
+  depth_crop <- crop(depth_data, sst_ext)
+
+# Re sample the depth data to match the resolution of sst data
+  depth_crop_res <- resample(depth_crop, mean_sst)
+
+  c(depth_crop_res, mean_sst)
+  
+# Create reclassification matrices
+  sst_rcl <- matrix(c(-Inf, min_temp, 0,
+                  min_temp, max_temp, 1,
+                  max_temp, Inf, 0), 
+                  ncol = 3, byrow=TRUE)
+
+  depth_rcl <- matrix(c(-Inf, max_depth, 0,
+                  max_depth, min_depth, 1,
+                  min_depth, Inf, 0), 
+                  ncol = 3, byrow=TRUE)
+
+# Reclassify raster data with matrices
+  sst_reclass <- classify(mean_sst, rcl = sst_rcl)
+
+  depth_reclass <- classify(depth_crop_res, rcl = depth_rcl)
+  
+# Find area where there is overlap in suitability
+  suitable_cells <- sst_reclass*depth_reclass
+
+# Mask EEZ data by suitable cells in West Coast region
+  suitable_eez <- mask(suitable_cells, eez_data)
+
+# Get EEZ data for only suitable EEZ areas
+  zonal <- extract(suitable_eez, eez_data)
+
+# Find the suitable area contained by each cell
+ eez_area <- suitable_eez *cellSize(suitable_eez, unit = 'km')
+
+# Extract the total area from EEZ zones
+ zonal_area <- extract(eez_area, eez_data)
+ 
+# Find the total suitable area in each EEZ zone
+  zonal_area <- zonal_area %>% 
+  group_by(ID) %>% 
+  summarize(area = sum(mean, na.rm = TRUE)) %>% 
+  rename('rgn_id' = ID)
+
+# Join EEZ data with suitable area data by region
+eez_zone_areas <- left_join(eez_data, zonal_area, by = 'rgn_id')
+
+# Plot the species 
+tm_shape(eez_zone_areas) +
+  tm_polygons(fill = 'area',
+              fill.scale = tm_scale_continuous(values = "brewer.blues"), 
+              fill.legend = tm_legend(title = "suitable area (km²)")) +
+  tm_basemap("Esri.OceanBasemap") +
+  tm_title(text = paste0("Total Suitable Area for ", species_name, " Aquaculture by EEZ"), width = 10) +
+  tm_layout(component.autoscale=FALSE) +
+  tm_graticules(alpha = 0.2)
+}
+```
 
 
+```{r}
+# Compare output from function to original map
+oyster_map <- eez_area_zone(eez_data = eez, 
+              depth_data = depth, 
+              sst_data = sst, 
+              min_temp = 11,
+              max_temp = 30,
+              min_depth = 0, 
+              max_depth = -70, 
+              species_name = "Oyster")
 
+yellowtail_map <- eez_area_zone(eez_data = eez, 
+              depth_data = depth, 
+              sst_data = sst, 
+              min_temp = 18,
+              max_temp = 24,
+              min_depth = -3, 
+              max_depth = -300, 
+              species_name = "California Yellowtail")
+
+tmap_arrange(oyster_map, yellowtail_map, nrow = 2)
 ```
 
