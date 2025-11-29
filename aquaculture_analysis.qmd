@@ -39,6 +39,7 @@ sst <- rast(c((here("data", "average_annual_sst_2008.tif")),
 ```
 
 ```{r}
+#| output: false
 # Check CRS and fix if no match
 if (crs(eez) == crs(depth) &
 crs(eez) == crs(sst) &
@@ -68,6 +69,7 @@ depth_crop <- crop(depth, sst_ext)
 ```
 
 ```{r}
+#| output: false
 res(depth_crop) == res(mean_sst)
 
 depth_crop_res = resample(depth_crop, mean_sst)
@@ -76,6 +78,8 @@ res(depth_crop_res) == res(mean_sst)
 ```
 
 ```{r}
+#| output: false
+
 # Check that bathymetry layer can stack with mean_sst- making sure that crs, res, and ext match
 c(depth_crop_res, mean_sst)
 # Works
@@ -138,7 +142,20 @@ tm_shape(eez_zone_areas) +
   tm_basemap("Esri.OceanBasemap") +
   tm_title(text = "Total Suitable Area for Oyster Aquaculture by EEZ", width = 10) +
   tm_layout(component.autoscale=FALSE) +
-  tm_graticules(alpha = 0.2)
+  tm_graticules(alpha = 0.2) +
+   tm_basemap("Esri.OceanBasemap") +
+  tm_text(text = "rgn", size = 0.4)
+
+# Create subset of data frame to pull out most suitable EEZ
+eez_table <- eez_zone_areas %>% 
+  select(rgn, area) %>% 
+  st_drop_geometry() %>% 
+  #rename("Region" = rgn, "Area (km²)" = area) %>% 
+  slice_max(area, n=1)
+
+# Print in kable formatting
+kableExtra::kable(eez_table, caption = "Most Suitable West Coast EEZ for Oysters", align = "c")
+
 ```
 
 ```{r}
@@ -167,8 +184,6 @@ crs(depth_data) != crs(sst_data)){
 # Re sample the depth data to match the resolution of sst data
   depth_crop_res <- resample(depth_crop, mean_sst)
 
-  c(depth_crop_res, mean_sst)
-  
 # Create reclassification matrices
   sst_rcl <- matrix(c(-Inf, min_temp, 0,
                   min_temp, max_temp, 1,
@@ -210,21 +225,34 @@ crs(depth_data) != crs(sst_data)){
 eez_zone_areas <- left_join(eez_data, zonal_area, by = 'rgn_id')
 
 # Plot the species 
-tm_shape(eez_zone_areas) +
+print(
+  tm_shape(eez_zone_areas) +
   tm_polygons(fill = 'area',
               fill.scale = tm_scale_continuous(values = "brewer.blues"), 
               fill.legend = tm_legend(title = "suitable area (km²)")) +
-  tm_basemap("Esri.OceanBasemap") +
   tm_title(text = paste0("Total Suitable Area for ", species_name, " Aquaculture by EEZ"), width = 10) +
   tm_layout(component.autoscale=FALSE) +
-  tm_graticules(alpha = 0.2)
+  tm_graticules(alpha = 0.2) +
+  tm_basemap("Esri.OceanBasemap") +
+  tm_text(text = "rgn", size = 0.4)
+  )
+
+# Create subset of data frame to pull out most suitable EEZ
+eez_table <- eez_zone_areas %>% 
+  select(rgn, area) %>% 
+  st_drop_geometry() %>% 
+  slice_max(area, n=1)
+
+
+# Print in kable formatting
+kableExtra::kable(eez_table, caption = paste0("Most Suitable West Coast EEZ for ", species_name), align = "c")
 }
 ```
 
 
 ```{r}
 # Compare output from function to original map
-oyster_map <- eez_area_zone(eez_data = eez, 
+eez_area_zone(eez_data = eez, 
               depth_data = depth, 
               sst_data = sst, 
               min_temp = 11,
@@ -232,8 +260,10 @@ oyster_map <- eez_area_zone(eez_data = eez,
               min_depth = 0, 
               max_depth = -70, 
               species_name = "Oyster")
+```
 
-yellowtail_map <- eez_area_zone(eez_data = eez, 
+```{r}
+eez_area_zone(eez_data = eez, 
               depth_data = depth, 
               sst_data = sst, 
               min_temp = 18,
@@ -241,7 +271,5 @@ yellowtail_map <- eez_area_zone(eez_data = eez,
               min_depth = -3, 
               max_depth = -300, 
               species_name = "California Yellowtail")
-
-tmap_arrange(oyster_map, yellowtail_map, nrow = 2)
 ```
 
