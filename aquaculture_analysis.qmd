@@ -1,10 +1,21 @@
 ---
 title: "EDS 223 Homework 4: Determining Suitable Aquaculture EEZ"
+author: "Nathalie Bonnet"
+date: 2025-11-29
 format: html
+execute: 
+  warning: false
+  message: false
 ---
 
+## README
+
+![](images/README_screenshot.png){fig-align="center"}
+
 ## Setup Code
+
 1.  Loading necessary libraries
+
 ```{r}
 #| output: false
 # Read in necessary libraries
@@ -19,8 +30,8 @@ library(tidyterra)
 library(stars)
 ```
 
-
 2.  Importing data
+
 ```{r}
 #| output: false
 # Load data in
@@ -38,6 +49,10 @@ sst <- rast(c((here("data", "average_annual_sst_2008.tif")),
 
 ```
 
+## Data processing
+
+1.  Check if coordinate reference systems match between datasets, make them all match the exclusive economic zone (eez) data CRS.
+
 ```{r}
 #| output: false
 # Check CRS and fix if no match
@@ -52,7 +67,8 @@ crs(depth) == crs(sst)){
 }
 ```
 
-Find mean SST from 2008-2012
+2.  Find the mean sea surface temperature (SST) from 2008-2012 on the West Coast.
+
 ```{r}
 # Create raster of average SST values
 mean_sst <- mean(sst)
@@ -60,6 +76,7 @@ mean_sst <- mean(sst)
 mean_sst <- mean_sst - 273.15
 ```
 
+3.  Crop ocean depth data to the same extent as the mean_sst raster.
 
 ```{r}
 # Crop by the extent of the sst
@@ -67,6 +84,8 @@ sst_ext <- ext(mean_sst)
 
 depth_crop <- crop(depth, sst_ext)
 ```
+
+4.  Check that the spatial resolutions are the same between the bathymetry data and the mean sst data. Resample the depth crop to obtain the same resoluton as the sst and recheck the match.
 
 ```{r}
 #| output: false
@@ -77,14 +96,17 @@ depth_crop_res = resample(depth_crop, mean_sst)
 res(depth_crop_res) == res(mean_sst)
 ```
 
+5.  Intermediate sanity check: if raster layers can stack it confirms that the CRS, extent, and resolution are the same.
+
 ```{r}
 #| output: false
 
-# Check that bathymetry layer can stack with mean_sst- making sure that crs, res, and ext match
+# Check that bathymetry layer can stack with mean_sst
 c(depth_crop_res, mean_sst)
 # Works
 ```
 
+6.  Create reclassification matrices for depth and sst to define areas as suitable or unsuitable for aquaculture of oysters. Apply reclassification matrix to rasters.
 
 ```{r}
 # Reclassify suitable locations based on parameters
@@ -107,10 +129,14 @@ sst_reclass <- classify(mean_sst, rcl = sst_rcl)
 depth_reclass <- classify(depth_crop_res, rcl = depth_rcl)
 ```
 
+7.  Multiply depth and sst rasters to return "suitable" only for cells where both depth and temperature are classified as suitable originally.
+
 ```{r}
 # Multiply rasters to find where suitable conditions overlap
 suitable <- sst_reclass*depth_reclass
 ```
+
+8.  Count the total number of suitable cells by EEZ
 
 ```{r}
 # Find the total suitable area within each eez
@@ -118,23 +144,41 @@ suitable <- sst_reclass*depth_reclass
 # Mask eez by suitable cells in West Coast region
 suitable_eez <- mask(suitable, eez)
 
+# Extract values based on eez zones
 zonal <- extract(suitable_eez, eez)
 
+# Return the count of raster cells that are suitable in each eez
 zonal_count <- zonal %>% 
   group_by(ID) %>% 
   summarise(count = sum(mean, na.rm = TRUE)) 
 
+# Summary table
+kableExtra::kable(zonal_count, caption = "Total count of suitable rasters cells in each West Coast EEZ group", align = "c")
+```
+
+9.  Quantify the total area of suitability within each EEZ
+
+```{r}
+# Multiply the number of suitable cells by the dimensions of each cell itself to find area
 eez_area <- suitable_eez *cellSize(suitable_eez, unit = 'km')
 
+# Pull out values by eez zone 
 zonal_area <- extract(eez_area, eez)
 
+# Summarize total area by zone
 zonal_area <- zonal_area %>% 
   group_by(ID) %>% 
   summarize(area = sum(mean, na.rm = TRUE)) %>% 
   rename('rgn_id' = ID)
 
+# join area information to eez zone information
 eez_zone_areas <- left_join(eez, zonal_area, by = 'rgn_id')
+```
 
+10. Map suitable eez output for oysters
+
+```{r}
+# Create map with continuous area scale
 tm_shape(eez_zone_areas) +
   tm_polygons(fill = 'area',
               fill.scale = tm_scale_continuous(values = "brewer.blues"), 
@@ -155,8 +199,9 @@ eez_table <- eez_zone_areas %>%
 
 # Print in kable formatting
 kableExtra::kable(eez_table, caption = "Most Suitable West Coast EEZ for Oysters", align = "c")
-
 ```
+
+## Create generalized function to return the most suitable EEZ on the West Coast and a map of suitable area for specific species.
 
 ```{r}
 # Generalized function
@@ -249,6 +294,7 @@ kableExtra::kable(eez_table, caption = paste0("Most Suitable West Coast EEZ for 
 }
 ```
 
+Utilize function to check original output from oyster data and generate output for new species of interest.
 
 ```{r}
 # Compare output from function to original map
@@ -263,6 +309,7 @@ eez_area_zone(eez_data = eez,
 ```
 
 ```{r}
+# Use function for California Yellowstail aquaculture zone
 eez_area_zone(eez_data = eez, 
               depth_data = depth, 
               sst_data = sst, 
@@ -273,3 +320,10 @@ eez_area_zone(eez_data = eez,
               species_name = "California Yellowtail")
 ```
 
+## References
+
+| Data | Citation | Sources |
+|-----------------------------|------------------|-------------------------|
+| Coral Reef Watch: National Environmental Satellite, Data, and Information Service | *NOAA Coral Reef Watch*. NOAA Coral Reef Watch Daily 5km satellite coral bleaching heat stress SST anomaly product (version 3.1). https://coralreefwatch.noaa.gov/product/5km/index_5km_ssta.php | <https://coralreefwatch.noaa.gov/product/5km/index_5km_ssta.php> |
+| General Bathymetric Chart of the Oceans: Global ocean and land terrain models | *Gridded bathymetry data*. GEBCO. https://www.gebco.net/data-products/gridded-bathymetry-data#area | <https://www.gebco.net/data-products/gridded-bathymetry-data#area> |
+| Marineregions.org: EEZ boundaries | *EEZ boundaries.* Marine regions. https://www.marineregions.org/eez.php | <https://www.marineregions.org/eez.php> |
